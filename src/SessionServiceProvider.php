@@ -6,8 +6,10 @@ use Concept\Extensions\Event\Events\ExtensionAwakened;
 use Concept\Extensions\Event\Support\EventDispatcherResolver;
 use Concept\Extensions\SessionSymfony\Contracts\FlashBagInterface;
 use Concept\Extensions\SessionSymfony\Contracts\SessionInterface;
+use Closure;
 use League\Container\ServiceProvider\AbstractServiceProvider;
 use SessionHandlerInterface;
+use Symfony\Component\HttpFoundation\Session\Storage\Handler\NativeFileSessionHandler;
 use Symfony\Component\HttpFoundation\Session\Storage\NativeSessionStorage;
 
 final class SessionServiceProvider extends AbstractServiceProvider
@@ -16,10 +18,11 @@ final class SessionServiceProvider extends AbstractServiceProvider
 
     /**
      * @param array<string, mixed> $sessionOptions
+     * @param Closure(): SessionHandlerInterface|null $handlerFactory
      */
     public function __construct(
         private readonly array $sessionOptions,
-        private readonly SessionHandlerInterface $handler,
+        private readonly ?Closure $handlerFactory = null,
     ) {}
 
     public function provides(string $id): bool
@@ -40,7 +43,7 @@ final class SessionServiceProvider extends AbstractServiceProvider
                 anchorId: SessionInterface::class,
             ));
 
-            $storage = new NativeSessionStorage($this->sessionOptions, $this->handler);
+            $storage = new NativeSessionStorage($this->sessionOptions, $this->resolveHandler());
             $session = new Session($storage, flashes: new FlashBag());
 
             if (!$session->isStarted()) {
@@ -56,5 +59,14 @@ final class SessionServiceProvider extends AbstractServiceProvider
 
             return $session->getFlashBag();
         })->setShared(true);
+    }
+
+    private function resolveHandler(): SessionHandlerInterface
+    {
+        if ($this->handlerFactory !== null) {
+            return ($this->handlerFactory)();
+        }
+
+        return new NativeFileSessionHandler();
     }
 }
